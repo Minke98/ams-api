@@ -20,7 +20,7 @@ return [
                 'host' => 'localhost', // kalau nanti prod ganti host ini
                 'user' => 'root',
                 'pass' => 'P@ssw0rd',
-                'dbname' => 'artimu_absen',
+                'dbname' => 'monitoring_report',
                 'driver' => 'mysql',
             ],
             'second' => [

@@ -1,202 +1,271 @@
 <?php
 use Slim\Http\Request;
 use Slim\Http\Response;
+require_once __DIR__ . '/../helpers/IdHelper.php';
 
 return function (\Slim\App $app) {
     
     $app->get("/claim/check", function (Request $request, Response $response) {
         $params = $request->getQueryParams();
-        $employee_id = $params["employee_id"] ?? null;
-    
-        if (!$employee_id) {
-            $data = [
+        $nip = $params["nip"] ?? null;
+
+        if (!$nip) {
+            $response->getBody()->write(json_encode([
                 "status" => false,
-                "message" => "Parameter 'employee_id' diperlukan"
-            ];
-            $response->getBody()->write(json_encode($data));
+                "message" => "Parameter 'nip' is required"
+            ]));
             return $response->withHeader("Content-Type", "application/json")->withStatus(400);
         }
-    
-        $sql = "
-            SELECT 
-                e.id AS employee_id, 
-                e.id_number,
-                e.full_name,
-                e.email,
-                e.no_tlpn,
-                e.is_claim,
-                e.is_exit,
-                p.id AS position_id,
-                p.position_name,
-                d.id AS department_id,
-                d.dept_name,
-                c.id AS company_id,
-                c.company_name
-            FROM ar_employee e
-            LEFT JOIN ar_position p ON e.position_id = p.id
-            LEFT JOIN ar_department d ON p.dept_id = d.id
-            LEFT JOIN ar_company c ON e.company_id = c.id
-            WHERE e.id = :employee_id
-        ";
 
         $db = $this->get('db_default');
-    
+
         try {
-            $stmt = $db->prepare($sql);
-            $stmt->execute(["employee_id" => $employee_id]);
-            $employee = $stmt->fetch();
-    
-            if (!$employee) {
-                $data = [
+            // ---- 1️⃣ Cek SDM ----
+            $sql_sdm = "SELECT * FROM mr_sdm WHERE nip = :nip LIMIT 1";
+            $stmt = $db->prepare($sql_sdm);
+            $stmt->execute(["nip" => $nip]);
+            $sdm = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$sdm) {
+                $response->getBody()->write(json_encode([
                     "status" => false,
-                    "message" => "Employee ID not found"
-                ];
-                $response->getBody()->write(json_encode($data));
+                    "message" => "NIP not found"
+                ]));
                 return $response->withHeader("Content-Type", "application/json")->withStatus(404);
             }
-    
-            if ($employee["is_claim"]) {
-                $data = [
-                    "status" => false,
-                    "message" => "Employee ID has already been claimed"
-                ];
-                $response->getBody()->write(json_encode($data));
-                return $response->withHeader("Content-Type", "application/json")->withStatus(404);
+
+            // Tambahkan base URL untuk foto
+            $baseUrl = $request->getUri()->getScheme() . "://" . $request->getUri()->getHost();
+            if ($request->getUri()->getPort()) {
+                $baseUrl .= ":" . $request->getUri()->getPort();
+            }
+            if (!empty($sdm["foto"])) {
+                $sdm["foto"] = $baseUrl . "/" . $sdm["foto"];
+            }
+
+            // ---- 2️⃣ Cek user berdasarkan sdm_id ----
+            $sql_user = "
+                SELECT 
+                    u.id AS user_id,
+                    u.username,
+                    u.email,
+                    u.role,
+                    u.device_id,
+                    u.is_claim,
+                    u.status,
+                    u.foto,
+                    u.last_login,
+                    u.sdm_id
+                FROM mr_users u
+                WHERE u.sdm_id = :sdm_id
+                LIMIT 1
+            ";
+            $stmt = $db->prepare($sql_user);
+            $stmt->execute(["sdm_id" => $sdm["id"]]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // ---- Gabungkan data SDM ke user ----
+            if ($user) {
+                if (intval($user["is_claim"]) === 1) {
+                    $response->getBody()->write(json_encode([
+                        "status" => false,
+                        "message" => "SDM already claimed by another user"
+                    ]));
+                    return $response->withHeader("Content-Type", "application/json")->withStatus(409);
+                }
             } else {
-                $data = [
-                    "status" => true,
-                    "data" => [
-                        "employee" => [
-                            "id" => $employee["employee_id"],
-                            "id_number" => $employee["id_number"],
-                            "full_name" => $employee["full_name"],
-                            "email" => $employee["email"],
-                            "no_tlpn" => $employee["no_tlpn"],
-                            "position" => [
-                                "id" => $employee["position_id"],
-                                "position_name" => $employee["position_name"],
-                                "department" => [
-                                    "id" => $employee["department_id"],
-                                    "dept_name" => $employee["dept_name"]
-                                ]
-                            ],
-                            "company" => [
-                                "id" => $employee["company_id"],
-                                "company_name" => $employee["company_name"]
-                            ],
-                            "is_claim" => $employee["is_claim"],
-                            "is_exit" => $employee["is_exit"],
-                        ]
-                    ]
+                $user = [
+                    "user_id" => null,
+                    "username" => null,
+                    "email" => null,
+                    "role" => null,
+                    "device_id" => null,
+                    "is_claim" => 0,
+                    "status" => null,
+                    "foto" => null,
+                    "last_login" => null,
+                    "sdm_id" => $sdm["id"]
                 ];
             }
-    
-            $response->getBody()->write(json_encode($data));
+
+            // Masukkan data SDM ke dalam field 'sdm'
+            $user["sdm"] = $sdm;
+
+            // ---- Response final ----
+            $response->getBody()->write(json_encode([
+                "status" => true,
+                "message" => "SDM found",
+                "data" => [
+                    "user" => $user
+                ]
+            ]));
             return $response->withHeader("Content-Type", "application/json")->withStatus(200);
-    
+
         } catch (PDOException $e) {
-            $data = [
+            $response->getBody()->write(json_encode([
                 "status" => false,
                 "message" => "Database error: " . $e->getMessage()
-            ];
-            $response->getBody()->write(json_encode($data));
+            ]));
             return $response->withHeader("Content-Type", "application/json")->withStatus(500);
         }
     });
-    
+
+
+
 
     $app->post("/claim", function (Request $request, Response $response) {
         try {
             $data = $request->getParsedBody();
             error_log("Parsed body: " . print_r($data, true));
-    
-            $employee_id = $data["employee_id"] ?? null;
-            $username = $data["username"] ?? null;
+
+            $nip        = $data["nip"] ?? null;
+            $username   = $data["username"] ?? null;
             $passwordRaw = $data["password"] ?? null;
-            $email = $data["email"] ?? null;
-            $no_tlpn = $data["no_tlpn"] ?? null;
-            $device_id = $data["device_id"] ?? null;
-    
-            if (!$employee_id || !$username || !$passwordRaw || !$device_id) {
-                throw new Exception("Data tidak lengkap");
+            $email      = $data["email"] ?? null;
+            $device_id  = $data["device_id"] ?? null;
+            $role       = $data["role"] ?? null;
+
+            // Validasi input
+            if (!$nip || !$username || !$passwordRaw || !$device_id || !$role) {
+                return $response->withJson([
+                    "status" => false,
+                    "message" => "Data tidak lengkap"
+                ], 400);
             }
-    
-            $password = password_hash($passwordRaw, PASSWORD_BCRYPT);
+
             $db = $this->get('db_default');
-    
-            // Cek apakah employee_id valid dan belum diklaim
-            $checkSql = "SELECT * FROM ar_employee WHERE id = :id AND is_claim = 0";
-            $checkStmt = $db->prepare($checkSql);
-            $checkStmt->execute(["id" => $employee_id]);
-            $employee = $checkStmt->fetch();
-    
-            if (!$employee) {
+            $password = password_hash($passwordRaw, PASSWORD_BCRYPT);
+
+            // 1. Cek SDM berdasarkan NIP
+            $sql_sdm = "SELECT id, nip, nama_lengkap
+                        FROM mr_sdm 
+                        WHERE nip = :nip LIMIT 1";
+
+            $stmt = $db->prepare($sql_sdm);
+            $stmt->execute(["nip" => $nip]);
+            $sdm = $stmt->fetch();
+
+            if (!$sdm) {
                 return $response->withJson([
                     "status" => false,
-                    "message" => "ID tidak ditemukan atau sudah diklaim"
-                ], 400);
+                    "message" => "NIP tidak ditemukan"
+                ], 404);
             }
-    
-            // Cek apakah device_id sudah dipakai oleh user lain
-            $deviceCheckSql = "SELECT * FROM ar_users WHERE device_id = :device_id";
-            $deviceCheckStmt = $db->prepare($deviceCheckSql);
-            $deviceCheckStmt->execute(["device_id" => $device_id]);
-            $existing = $deviceCheckStmt->fetch();
-    
-            if ($existing) {
+
+            $sdm_id = $sdm["id"];
+
+            // 2. Cek apakah SDM sudah punya user
+            $sql_user = "SELECT * FROM mr_users WHERE sdm_id = :sdm_id LIMIT 1";
+            $stmt = $db->prepare($sql_user);
+            $stmt->execute(["sdm_id" => $sdm_id]);
+            $user = $stmt->fetch();
+
+            // === CASE A: SDM sudah punya user ===
+            if ($user) {
+
+                // Sudah diklaim → tolak
+                if ($user["is_claim"] == 1) {
+                    return $response->withJson([
+                        "status" => false,
+                        "message" => "SDM ini sudah diklaim oleh user lain"
+                    ], 409);
+                }
+
+                // Device ID digunakan user lain
+                $deviceCheckSql = "SELECT id FROM mr_users 
+                                WHERE device_id = :device_id AND id != :id LIMIT 1";
+
+                $deviceCheckStmt = $db->prepare($deviceCheckSql);
+                $deviceCheckStmt->execute([
+                    "device_id" => $device_id,
+                    "id" => $user["id"]
+                ]);
+
+                if ($deviceCheckStmt->fetch()) {
+                    return $response->withJson([
+                        "status" => false,
+                        "message" => "Device ini sudah digunakan oleh akun lain"
+                    ], 400);
+                }
+
+                // UPDATE user
+                $updateSql = "
+                    UPDATE mr_users 
+                    SET 
+                        username = :username,
+                        password = :password,
+                        email = :email,
+                        device_id = :device_id,
+                        role = :role,
+                        is_claim = 1,
+                        updated_at = NOW()
+                    WHERE id = :id
+                ";
+
+                $updateStmt = $db->prepare($updateSql);
+                $updateStmt->execute([
+                    "username" => $username,
+                    "password" => $password,
+                    "email" => $email,
+                    "device_id" => $device_id,
+                    "role" => $role,
+                    "id" => $user["id"]
+                ]);
+
                 return $response->withJson([
-                    "status" => false,
-                    "message" => "Device ini sudah digunakan oleh akun lain"
-                ], 400);
+                    "status" => true,
+                    "message" => "Klaim berhasil",
+                    "data" => [
+                        "user_id" => $user["id"],
+                        "username" => $username,
+                        "email" => $email,
+                        "device_id" => $device_id,
+                        "role" => intval($role),
+                    ]
+                ], 200);
             }
-    
-            // Insert ke ar_users
-            $userId = sprintf(
-                "%03d-%06d-%02d",
-                rand(100, 999),
-                rand(100000, 999999),
-                (int)substr(microtime(true) * 100, -2)
-            );
-    
-            $insertSql = "INSERT INTO ar_users (id, username, password, employee_id, device_id) 
-                          VALUES (:id, :username, :password, :employee_id, :device_id)";
+
+            // === CASE B: SDM belum punya user → buat baru ===
+            $newUserId = generateUserId($db);
+
+            $insertSql = "
+                INSERT INTO mr_users (id, sdm_id, username, password, email, device_id, role, is_claim, status, created_at)
+                VALUES (:id, :sdm_id, :username, :password, :email, :device_id, :role, 1, 1, NOW())
+            ";
+
             $insertStmt = $db->prepare($insertSql);
-            $insert = $insertStmt->execute([
-                "id" => $userId,
-                "username" => $username,
-                "password" => $password,
-                "employee_id" => $employee_id,
-                "device_id" => $device_id
+            $insertStmt->execute([
+                "id"        => $newUserId,
+                "sdm_id"    => $sdm_id,
+                "username"  => $username,
+                "password"  => $password,
+                "email"     => $email,
+                "device_id" => $device_id,
+                "role"      => $role
             ]);
-    
-            if (!$insert) {
-                $errorInfo = $insertStmt->errorInfo();
-                error_log("Insert error: " . print_r($errorInfo, true));
-                throw new Exception("Insert ke ar_users gagal");
-            }
-    
-            // Update data di ar_employee
-            $updateSql = "UPDATE ar_employee SET is_claim = 1, email = :email, no_tlpn = :no_tlpn WHERE id = :id";
-            $updateStmt = $db->prepare($updateSql);
-            $updateStmt->execute([
-                "email" => $email,
-                "no_tlpn" => $no_tlpn,
-                "id" => $employee_id
-            ]);
-    
+
+            // Sukses
             return $response->withJson([
                 "status" => true,
-                "message" => "Klaim berhasil"
-            ], 200);
-    
+                "message" => "Klaim berhasil dan akun baru dibuat",
+                "data" => [
+                    "user_id" => $newUserId,
+                    "username" => $username,
+                    "email" => $email,
+                    "device_id" => $device_id,
+                    "role" => intval($role),
+                ]
+            ], 201);
+
         } catch (Exception $e) {
-            error_log("Exception caught: " . $e->getMessage());
+            error_log("Exception: " . $e->getMessage());
             return $response->withJson([
                 "status" => false,
                 "message" => $e->getMessage()
             ], 500);
         }
     });
+
     
     
 };

@@ -1,8 +1,8 @@
 <?php
-use Psr\Http\Message\ResponseInterface as Response;
-use Psr\Http\Message\ServerRequestInterface as Request;
+use Slim\Http\Request;
+use Slim\Http\Response;
 
-return function ($app) {
+return function (\Slim\App $app) {
     $app->post('/change-password', function (Request $request, Response $response) {
         $input = $request->getParsedBody();
         $employeeId = $input['employee_id'] ?? '';

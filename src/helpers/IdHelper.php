@@ -11,6 +11,28 @@ if (!function_exists('generateCustomId')) {
     }
 }
 
+
+function generateUserId($db) {
+    // Ambil ID terakhir
+    $sql = "SELECT id FROM mr_users ORDER BY id DESC LIMIT 1";
+    $stmt = $db->query($sql);
+    $last = $stmt->fetchColumn();
+
+    if (!$last) {
+        return "USR001"; // Jika tidak ada data
+    }
+
+    // Ambil angka 3 digit terakhir, convert ke integer
+    $number = intval(substr($last, 3));
+
+    // Increment
+    $newNumber = $number + 1;
+
+    // Format kembali: USR + zero padding 3 digit
+    return "USR" . str_pad($newNumber, 3, "0", STR_PAD_LEFT);
+}
+
+
 function generateClientId($db) {
     // Ambil angka terbesar dari ID yang sudah ada
     $stmt = $db->query("

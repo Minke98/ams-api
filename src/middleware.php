@@ -12,7 +12,7 @@ return function ($app) {
 
         // Menggunakan db_default untuk mengecek keberadaan API Key
         $db = $app->getContainer()->get('db_default');
-        $sql = "SELECT * FROM ar_api_users WHERE api_key = :api_key";
+        $sql = "SELECT * FROM mr_api_users WHERE api_key = :api_key";
         
         try {
             $stmt = $db->prepare($sql);
@@ -21,7 +21,7 @@ return function ($app) {
             // Cek apakah API Key ditemukan
             if ($stmt->rowCount() > 0) {
                 // Update hit count jika API key valid
-                $sql = "UPDATE ar_api_users SET hit = hit + 1 WHERE api_key = :api_key";
+                $sql = "UPDATE mr_api_users SET hit = hit + 1 WHERE api_key = :api_key";
                 $stmt = $db->prepare($sql);
                 $stmt->execute([":api_key" => $key]);
 

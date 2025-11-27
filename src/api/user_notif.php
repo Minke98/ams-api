@@ -1,10 +1,9 @@
 <?php
-use Slim\App;
 use Slim\Http\Request;
 use Slim\Http\Response;
 require_once __DIR__ . '/../helpers/IdHelper.php';
 
-return function (App $app) {
+return function (\Slim\App $app) {
 
     $app->get('/user/notifications', function (Request $request, Response $response) {
         $db = $this->get('db_default');
