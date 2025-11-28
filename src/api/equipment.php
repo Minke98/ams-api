@@ -31,8 +31,6 @@ return function (\Slim\App $app) {
                     tahun_pengadaan AS tahun,
                     status_alat,
                     kondisi,
-                    tanggal_maintenance_terakhir,
-                    tanggal_laporan_kerusakan_terakhir,
                     sparepart_tersedia,
                     sparepart_list,
                     deskripsi,
