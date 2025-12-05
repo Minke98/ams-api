@@ -8,7 +8,7 @@ return function (\Slim\App $app) {
         $db = $this->get('db_default');
 
         try {
-            $stmt = $db->query("SELECT id, kode_prodi, nama_prodi, created_at, updated_at FROM mr_prodi ORDER BY nama_prodi ASC");
+            $stmt = $db->query("SELECT id, kode_prodi, nama_prodi, foto, created_at, updated_at FROM mr_prodi ORDER BY nama_prodi ASC");
             $prodiList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $response->getBody()->write(json_encode([

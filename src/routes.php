@@ -22,6 +22,13 @@ return function ($app) {
     (require __DIR__ . '/api/prodi.php')($app);
     (require __DIR__ . '/api/room.php')($app);
     (require __DIR__ . '/api/equipment.php')($app);
+    (require __DIR__ . '/api/maintenance_history.php')($app);
+    (require __DIR__ . '/api/maintenance_schedule.php')($app);
+    (require __DIR__ . '/api/report_damage.php')($app);
+    (require __DIR__ . '/api/sdm.php')($app);
+    (require __DIR__ . '/api/certificate.php')($app);
+    (require __DIR__ . '/api/report.php')($app);
+    (require __DIR__ . '/api/reminder.php')($app);
     
 
     

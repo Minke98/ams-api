@@ -14,91 +14,109 @@ if (!function_exists('generateCustomId')) {
     }
 }
 
+// =====================================================
+// 🔹 Generic function untuk generate ID aman
+// =====================================================
+function generateSafeId($db, $table, $prefix, $length, $substrStart = null) {
+    $substrStart = $substrStart ?? strlen($prefix) + 1;
+    
+    // Ambil nomor terbesar
+    $stmt = $db->query("
+        SELECT MAX(CAST(SUBSTRING(id, $substrStart) AS UNSIGNED)) AS max_num
+        FROM $table
+        WHERE id LIKE '$prefix%'
+    ");
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $nextNumber = ($result && $result['max_num']) ? ((int)$result['max_num'] + 1) : 1;
+
+    // Loop untuk cek apakah ID sudah ada
+    do {
+        $newId = $prefix . str_pad($nextNumber, $length, "0", STR_PAD_LEFT);
+        $checkStmt = $db->prepare("SELECT COUNT(*) FROM $table WHERE id = :id");
+        $checkStmt->execute([':id' => $newId]);
+        $exists = $checkStmt->fetchColumn() > 0;
+        if ($exists) {
+            $nextNumber++;
+        }
+    } while ($exists);
+
+    return $newId;
+}
 
 // =====================================================
 // 🔹 Generate User ID → USR001, USR002, dst.
 // =====================================================
 function generateUserId($db) {
-    $sql = "SELECT id FROM mr_users ORDER BY id DESC LIMIT 1";
-    $stmt = $db->query($sql);
-    $last = $stmt->fetchColumn();
-
-    if (!$last) {
-        return "USR001";
-    }
-
-    $number = intval(substr($last, 3));
-    $newNumber = $number + 1;
-
-    return "USR" . str_pad($newNumber, 3, "0", STR_PAD_LEFT);
+    return generateSafeId($db, 'mr_users', 'USR', 3, 4);
 }
 
+// =====================================================
+// 🔹 Generate SDM ID → SDM001, SDM002, dst.
+// =====================================================
+function generateSdmId($db) {
+    return generateSafeId($db, 'mr_sdm', 'SDM', 3, 4);
+}
 
 // =====================================================
 // 🔹 Generate Client ID → CLT-001, CLT-002, dst.
 // =====================================================
 function generateClientId($db) {
-    $stmt = $db->query("
-        SELECT MAX(CAST(SUBSTRING(id, 5) AS UNSIGNED)) AS max_num 
-        FROM ar_client
-    ");
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    $nextNumber = ($result && $result['max_num']) ? ((int)$result['max_num'] + 1) : 1;
-
-    return sprintf("CLT-%03d", $nextNumber);
+    return generateSafeId($db, 'ar_client', 'CLT-', 3, 5);
 }
-
 
 // =====================================================
 // 🔹 Generate Project ID → PRJ-001, PRJ-002, dst.
 // =====================================================
 function generateProjectId($db) {
-    $stmt = $db->query("SELECT id FROM ar_client_project ORDER BY created_at DESC LIMIT 1");
-    $last = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if ($last && isset($last['id'])) {
-        $number = (int)substr($last['id'], 4);
-        $nextNumber = $number + 1;
-    } else {
-        $nextNumber = 1;
-    }
-
-    return sprintf("PRJ-%03d", $nextNumber);
+    return generateSafeId($db, 'ar_client_project', 'PRJ-', 3, 5);
 }
-
 
 // =====================================================
 // 🔹 Generate Activity ID → ACT-001, ACT-002, dst.
 // =====================================================
 function generateActivityId($db) {
-    $stmt = $db->query("SELECT id FROM ar_client_project_activity WHERE id LIKE 'ACT-%' ORDER BY id DESC LIMIT 1");
-    $last = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    $num = $last ? (int) str_replace('ACT-', '', $last['id']) + 1 : 1;
-
-    return 'ACT-' . str_pad($num, 3, '0', STR_PAD_LEFT);
+    return generateSafeId($db, 'ar_client_project_activity', 'ACT-', 3, 5);
 }
 
-
-
 // =====================================================
-// 🔥 NEW — Generate Room ID → ROOM-001, ROOM-002, dst.
+// 🔹 Generate Room ID → R001, R002, dst.
 // =====================================================
 function generateRoomId($db) {
-    // Ambil angka terbesar dari id di tabel mr_ruangan
-    $stmt = $db->query("
-        SELECT MAX(CAST(SUBSTRING(id, 2) AS UNSIGNED)) AS max_num
-        FROM mr_ruangan
-    ");
-
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    $nextNumber = ($result && $result['max_num'])
-        ? ((int)$result['max_num'] + 1)
-        : 1;
-
-    // Format R001, R002, R010, dst
-    return "R" . str_pad($nextNumber, 3, "0", STR_PAD_LEFT);
+    return generateSafeId($db, 'mr_ruangan', 'R', 3, 2);
 }
 
+// =====================================================
+// 🔹 Generate Room Usage ID → P001, P002, dst.
+// =====================================================
+function generateRoomUsageId($db) {
+    return generateSafeId($db, 'mr_penggunaan_ruangan', 'P', 3, 2);
+}
+
+// =====================================================
+// 🔹 Generate Alat ID → A001, A002, dst.
+// =====================================================
+function generateAlatId($db) {
+    return generateSafeId($db, 'mr_alat', 'A', 3, 2);
+}
+
+// =====================================================
+// 🔹 Generate Software ID → SW001, SW002, dst.
+// =====================================================
+function generateSoftwareId($db) {
+    return generateSafeId($db, 'mr_software', 'SW', 3, 3);
+}
+
+// =====================================================
+// 🔹 Generate Maintenance ID → MT0001, MT0002, dst.
+// =====================================================
+function generateMaintenanceId($db) {
+    return generateSafeId($db, 'mr_maintenance', 'MT', 4, 3);
+}
+
+function generateReportDamageId($db) {
+    return generateSafeId($db, 'mr_laporan_kerusakan', 'LPR', 4, 4);
+}
+
+function generateCertificateId($db) {
+    return generateSafeId($db, 'mr_sertifikasi', 'SRT', 3, 4);
+}
