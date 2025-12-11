@@ -8,7 +8,7 @@ return function (\Slim\App $app) {
     // =========================
     // Check claim status
     // =========================
-    $app->get("/claim/check", function (Request $request, Response $response) {
+        $app->get("/claim/check", function (Request $request, Response $response) {
         $params = $request->getQueryParams();
         $nip = $params["nip"] ?? null;
 
@@ -22,62 +22,54 @@ return function (\Slim\App $app) {
         $db = $this->get('db_default');
 
         try {
-            // 1️⃣ Cari SDM
-            $sql_sdm = "SELECT * FROM mr_sdm WHERE user_id IN (SELECT id FROM mr_users WHERE nip = :nip) LIMIT 1";
-            $stmt = $db->prepare($sql_sdm);
+
+            // 1️⃣ Cari user berdasarkan nip (langsung dari mr_users)
+            $sql_user = "SELECT * FROM mr_users WHERE nip = :nip LIMIT 1";
+            $stmt = $db->prepare($sql_user);
             $stmt->execute(["nip" => $nip]);
-            $sdm = $stmt->fetch(PDO::FETCH_ASSOC);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$sdm) {
+            // 2️⃣ Jika user belum ada → return default profil kosong
+            if (!$user) {
+                return $response->withJson([
+                    "status" => true,
+                    "message" => "User not registered yet",
+                    "data" => [
+                        "user" => [
+                            "id" => null,
+                            "nip" => $nip,
+                            "full_name" => null,
+                            "username" => null,
+                            "email" => null,
+                            "device_id" => null,
+                            "is_claim" => 0,
+                            "foto" => null,
+                            "last_login" => null
+                        ]
+                    ]
+                ], 200);
+            }
+            if (intval($user["is_claim"]) === 1) {
                 return $response->withJson([
                     "status" => false,
-                    "message" => "SDM not found"
-                ], 404);
-            }
-
-            // 2️⃣ Cari user berdasarkan sdm->user_id
-            $user = null;
-            if (!empty($sdm["user_id"])) {
-                $sql_user = "SELECT * FROM mr_users WHERE id = :id LIMIT 1";
-                $stmt = $db->prepare($sql_user);
-                $stmt->execute(["id" => $sdm["user_id"]]);
-                $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            }
-
-            // Base URL untuk foto
-            $baseUrl = $request->getUri()->getScheme() . "://" . $request->getUri()->getHost();
-            if ($request->getUri()->getPort()) $baseUrl .= ":" . $request->getUri()->getPort();
-            if (!empty($user["foto"])) $user["foto"] = $baseUrl . "/" . $user["foto"];
-
-            // Jika user sudah klaim
-            if ($user && intval($user["is_claim"]) === 1) {
-                return $response->withJson([
-                    "status" => false,
-                    "message" => "SDM already claimed by another user"
+                    "message" => "User already claimed",
                 ], 409);
             }
 
-            // Default user structure
-            if (!$user) {
-                $user = [
-                    "id" => null,
-                    "nip" => $nip,
-                    "full_name" => null,
-                    "username" => null,
-                    "email" => null,
-                    "device_id" => null,
-                    "is_claim" => 0,
-                    "foto" => null,
-                    "last_login" => null,
-                ];
+            // 4️⃣ Tambahkan base URL ke foto jika ada
+            $baseUrl = $request->getUri()->getScheme() . "://" . $request->getUri()->getHost();
+            if ($request->getUri()->getPort()) $baseUrl .= ":" . $request->getUri()->getPort();
+
+            if (!empty($user["foto"])) {
+                $user["foto"] = $baseUrl . "/" . $user["foto"];
+            } else {
+                $user["foto"] = null;
             }
 
-            // Gabungkan SDM
-            $user["sdm"] = $sdm;
-
+            // 5️⃣ Return berhasil
             return $response->withJson([
                 "status" => true,
-                "message" => "SDM found",
+                "message" => "User found",
                 "data" => ["user" => $user]
             ], 200);
 
@@ -88,6 +80,7 @@ return function (\Slim\App $app) {
             ], 500);
         }
     });
+
 
     // =========================
     // Claim endpoint
@@ -111,34 +104,18 @@ return function (\Slim\App $app) {
             $db = $this->get('db_default');
             $password = password_hash($passwordRaw, PASSWORD_BCRYPT);
 
-            // 1️⃣ Cari SDM
-            $sql_sdm = "SELECT * FROM mr_sdm WHERE user_id IN (SELECT id FROM mr_users WHERE nip = :nip) LIMIT 1";
-            $stmt = $db->prepare($sql_sdm);
+            // 1️⃣ Cari user berdasarkan nip
+            $sql_user = "SELECT * FROM mr_users WHERE nip = :nip LIMIT 1";
+            $stmt = $db->prepare($sql_user);
             $stmt->execute(["nip" => $nip]);
-            $sdm = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if (!$sdm) {
-                return $response->withJson([
-                    "status" => false,
-                    "message" => "SDM not found"
-                ], 404);
-            }
-
-            // 2️⃣ Cari user berdasarkan sdm->user_id
-            $user = null;
-            if (!empty($sdm["user_id"])) {
-                $sql_user = "SELECT * FROM mr_users WHERE id = :id LIMIT 1";
-                $stmt = $db->prepare($sql_user);
-                $stmt->execute(["id" => $sdm["user_id"]]);
-                $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            }
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             // CASE A: user sudah ada → update
             if ($user) {
                 if ($user["is_claim"] == 1) {
                     return $response->withJson([
                         "status" => false,
-                        "message" => "SDM ini sudah diklaim oleh user lain"
+                        "message" => "User ini sudah diklaim"
                     ], 409);
                 }
 
@@ -155,8 +132,8 @@ return function (\Slim\App $app) {
 
                 // UPDATE user
                 $updateSql = "UPDATE mr_users 
-                              SET username = :username, password = :password, email = :email, device_id = :device_id, is_claim = 1, updated_at = NOW()
-                              WHERE id = :id";
+                            SET username = :username, password = :password, email = :email, device_id = :device_id, is_claim = 1, updated_at = NOW()
+                            WHERE id = :id";
                 $stmt = $db->prepare($updateSql);
                 $stmt->execute([
                     "username" => $username,
@@ -179,32 +156,25 @@ return function (\Slim\App $app) {
             }
 
             // CASE B: user belum ada → buat baru
-            $newUserId = generateUserId($db);
+            $newUserId = generateUserId($db); // helper generate ID baru
 
-            $insertSql = "INSERT INTO mr_users (id, nip, full_name, username, password, email, device_id, is_claim, created_at)
-                          VALUES (:id, :nip, :full_name, :username, :password, :email, :device_id, 1, NOW())";
+            $insertSql = "INSERT INTO mr_users (id, nip, username, password, email, device_id, is_claim, created_at)
+                        VALUES (:id, :nip, :username, :password, :email, :device_id, 1, NOW())";
             $stmt = $db->prepare($insertSql);
             $stmt->execute([
                 "id" => $newUserId,
                 "nip" => $nip,
-                "full_name" => $sdm["nama_lengkap"] ?? "",
                 "username" => $username,
                 "password" => $password,
                 "email" => $email,
                 "device_id" => $device_id
             ]);
 
-            // Hubungkan SDM ke user baru
-            $updateSdmSql = "UPDATE mr_sdm SET user_id = :user_id WHERE id = :sdm_id";
-            $stmt = $db->prepare($updateSdmSql);
-            $stmt->execute(["user_id" => $newUserId, "sdm_id" => $sdm["id"]]);
-
             // Ambil user baru untuk response
             $sql_user = "SELECT * FROM mr_users WHERE id = :id LIMIT 1";
             $stmt = $db->prepare($sql_user);
             $stmt->execute(["id" => $newUserId]);
             $newUser = $stmt->fetch(PDO::FETCH_ASSOC);
-            $newUser["sdm"] = $sdm;
 
             return $response->withJson([
                 "status" => true,
@@ -219,4 +189,5 @@ return function (\Slim\App $app) {
             ], 500);
         }
     });
+
 };

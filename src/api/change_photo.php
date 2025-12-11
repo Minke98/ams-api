@@ -36,7 +36,7 @@ return function (\Slim\App $app) {
 
             $filename = $user_id . "-" . $foto->getClientFilename();
             $foto->moveTo($directory . $filename);
-            $fotoPath = "uploads/photos/" . $filename;
+            $fotoPath = "/uploads/photos/" . $filename;
         }
 
         $db = $this->get('db_default');
