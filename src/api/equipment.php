@@ -50,7 +50,7 @@ return function (\Slim\App $app) {
                     updated_at
                 FROM mr_alat
                 WHERE ruangan_id = :ruangan_id
-                ORDER BY nama_alat ASC
+                ORDER BY UPPER(TRIM(nama_alat)) ASC
             ");
             $stmtAlat->execute(['ruangan_id' => $ruangan_id]);
             $alatList = $stmtAlat->fetchAll(PDO::FETCH_ASSOC);
@@ -99,6 +99,12 @@ return function (\Slim\App $app) {
 
             // Merge alat + software
             $equipment = array_merge($alatList, $softwareList);
+
+            // Sort final ASC berdasarkan name
+            usort($equipment, function ($a, $b) {
+                return strcmp(strtoupper(trim($a['name'])), strtoupper(trim($b['name'])));
+            });
+
 
             // Output final
             return $response->withHeader('Content-Type', 'application/json')

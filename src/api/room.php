@@ -50,7 +50,7 @@ return function (\Slim\App $app) {
                 FROM mr_ruangan r
                 LEFT JOIN mr_prodi p ON r.prodi_id = p.id
                 WHERE r.prodi_id = :prodi_id
-                ORDER BY r.nama_ruangan ASC
+                ORDER BY UPPER(TRIM(r.nama_ruangan)) ASC
             ");
 
             $stmt->execute(['prodi_id' => $prodi_id]);

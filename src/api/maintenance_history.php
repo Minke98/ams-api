@@ -36,10 +36,8 @@ return function (\Slim\App $app) {
                     $durasiParts[] = $diff->d . ' hari';
                 }
 
-                // Jam selalu ditampilkan
                 $durasiParts[] = $diff->h . ' jam';
 
-                // Menit ditampilkan jika >0 atau jika total durasi < 1 jam
                 if ($diff->i > 0 || ($diff->d == 0 && $diff->h == 0)) {
                     $durasiParts[] = $diff->i . ' menit';
                 }
@@ -51,14 +49,14 @@ return function (\Slim\App $app) {
             // 1) Ambil riwayat alat
             // ============================
             $sqlAlat = "
-                SELECT m.id, m.alat_id, a.nama_alat, a.merek_model, m.tanggal_mulai_maintenance, 
-                    m.tanggal_selesai_maintenance, m.teknisi, m.biaya, m.judul_maintenance, 
+                SELECT m.id, m.alat_id, a.nama_alat, a.merek_model, 
+                    m.tanggal_mulai_maintenance, m.tanggal_selesai_maintenance, 
+                    m.teknisi, m.biaya, m.judul_maintenance, 
                     m.deskripsi, m.next_maintenance, m.created_at
                 FROM mr_maintenance m
                 JOIN mr_alat a ON m.alat_id = a.id
                 WHERE a.ruangan_id = :ruangan_id
                 AND m.jenis_maintenance = 3
-                ORDER BY m.tanggal_selesai_maintenance DESC
             ";
             $stmt = $db->prepare($sqlAlat);
             $stmt->execute(['ruangan_id' => $ruangan_id]);
@@ -66,6 +64,7 @@ return function (\Slim\App $app) {
 
             foreach ($alatHistory as &$item) {
                 $item['durasi'] = hitungDurasi($item['tanggal_mulai_maintenance'], $item['tanggal_selesai_maintenance']);
+                $item['type'] = 'alat';
             }
 
             // ============================
@@ -74,13 +73,12 @@ return function (\Slim\App $app) {
             $sqlSoftware = "
                 SELECT m.id, m.software_id, s.nama_software, s.jenis_software, s.versi_tahun,
                     m.tanggal_mulai_maintenance, m.tanggal_selesai_maintenance, 
-                    m.teknisi, m.biaya, m.judul_maintenance, m.deskripsi, 
-                    m.next_maintenance, m.created_at
+                    m.teknisi, m.biaya, m.judul_maintenance, 
+                    m.deskripsi, m.next_maintenance, m.created_at
                 FROM mr_maintenance m
                 JOIN mr_software s ON m.software_id = s.id
                 WHERE s.ruangan_id = :ruangan_id
                 AND m.jenis_maintenance = 3
-                ORDER BY m.tanggal_selesai_maintenance DESC
             ";
             $stmt = $db->prepare($sqlSoftware);
             $stmt->execute(['ruangan_id' => $ruangan_id]);
@@ -88,15 +86,27 @@ return function (\Slim\App $app) {
 
             foreach ($softwareHistory as &$item) {
                 $item['durasi'] = hitungDurasi($item['tanggal_mulai_maintenance'], $item['tanggal_selesai_maintenance']);
+                $item['type'] = 'software';
             }
+
+            // ============================
+            // MERGE & SORT ASC BERDASARKAN judul_maintenance
+            // ============================
+            $history = array_merge($alatHistory, $softwareHistory);
+
+            usort($history, function ($a, $b) {
+                return strcmp(
+                    strtoupper(trim($a['judul_maintenance'])),
+                    strtoupper(trim($b['judul_maintenance']))
+                );
+            });
 
             // ============================
             // RESPONSE
             // ============================
             $response->getBody()->write(json_encode([
                 'status' => true,
-                'alat_history' => $alatHistory,
-                'software_history' => $softwareHistory
+                'history' => $history
             ]));
 
             return $response->withHeader('Content-Type', 'application/json')->withStatus(200);

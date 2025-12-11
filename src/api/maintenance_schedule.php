@@ -7,10 +7,10 @@ return function (\Slim\App $app) {
 
     $app->get('/maintenance/schedule', function ($request, $response) {
         $db = $this->get('db_default');
-
+    
         $params = $request->getQueryParams();
         $ruangan_id = $params['ruangan_id'] ?? null;
-
+    
         try {
             if (!$ruangan_id) {
                 $response->getBody()->write(json_encode([
@@ -19,54 +19,90 @@ return function (\Slim\App $app) {
                 ]));
                 return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
             }
-
+    
             // ============================
             // 1) SCHEDULE ALAT
             // ============================
             $sqlAlat = "
-                SELECT m.id, m.alat_id, a.nama_alat, a.merek_model, 
-                    m.tanggal_mulai_maintenance, m.next_maintenance,
-                    m.teknisi, m.judul_maintenance, m.deskripsi,
-                    m.jenis_maintenance, m.created_at
+                SELECT 
+                    m.id, 
+                    m.alat_id AS item_id,
+                    a.nama_alat AS name, 
+                    a.merek_model, 
+                    m.tanggal_mulai_maintenance, 
+                    m.next_maintenance,
+                    m.teknisi, 
+                    m.judul_maintenance, 
+                    m.deskripsi,
+                    m.jenis_maintenance, 
+                    m.created_at
                 FROM mr_maintenance m
                 JOIN mr_alat a ON m.alat_id = a.id
                 WHERE a.ruangan_id = :ruangan_id
                 AND m.jenis_maintenance IN (1, 2)
-                ORDER BY m.next_maintenance ASC
+                ORDER BY a.nama_alat ASC
             ";
             $stmt = $db->prepare($sqlAlat);
             $stmt->execute(['ruangan_id' => $ruangan_id]);
             $alatSchedule = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+    
+            foreach ($alatSchedule as &$a) {
+                $a['type'] = 'alat';
+            }
+    
             // ============================
             // 2) SCHEDULE SOFTWARE
             // ============================
             $sqlSoftware = "
-                SELECT m.id, m.software_id, s.nama_software, s.jenis_software, s.versi_tahun,
-                    m.tanggal_mulai_maintenance, m.next_maintenance,
-                    m.teknisi, m.judul_maintenance, m.deskripsi,
-                    m.jenis_maintenance, m.created_at
+                SELECT 
+                    m.id, 
+                    m.software_id AS item_id,
+                    s.nama_software AS name, 
+                    s.jenis_software, 
+                    s.versi_tahun,
+                    m.tanggal_mulai_maintenance, 
+                    m.next_maintenance,
+                    m.teknisi, 
+                    m.judul_maintenance, 
+                    m.deskripsi,
+                    m.jenis_maintenance, 
+                    m.created_at
                 FROM mr_maintenance m
                 JOIN mr_software s ON m.software_id = s.id
                 WHERE s.ruangan_id = :ruangan_id
                 AND m.jenis_maintenance IN (1, 2)
-                ORDER BY m.next_maintenance ASC
+                ORDER BY s.nama_software ASC
             ";
             $stmt = $db->prepare($sqlSoftware);
             $stmt->execute(['ruangan_id' => $ruangan_id]);
             $softwareSchedule = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            foreach ($softwareSchedule as &$s) {
+                $s['type'] = 'software';
+            }
+    
+            // MERGE & SORT ALFABET GLOBAL
+            $schedule = array_merge($alatSchedule, $softwareSchedule);
+            
+            // Sort A–Z berdasarkan judul_maintenance
+            usort($schedule, function ($a, $b) {
+                return strcmp(
+                    strtoupper(trim($a['judul_maintenance'])),
+                    strtoupper(trim($b['judul_maintenance']))
+                );
+            });
 
+    
             // ============================
             // RESPONSE
             // ============================
             $response->getBody()->write(json_encode([
                 'status' => true,
-                'alat_schedule' => $alatSchedule,
-                'software_schedule' => $softwareSchedule
+                'schedule' => $schedule
             ]));
-
+    
             return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
-
+    
         } catch (PDOException $e) {
             $response->getBody()->write(json_encode([
                 'status' => false,
@@ -75,6 +111,8 @@ return function (\Slim\App $app) {
             return $response->withHeader('Content-Type', 'application/json')->withStatus(500);
         }
     });
+
+
 
 
     $app->put('/maintenance/schedule/update', function ($request, $response) {
