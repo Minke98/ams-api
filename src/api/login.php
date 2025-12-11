@@ -68,6 +68,18 @@ return function (\Slim\App $app) {
 
             unset($user["password"]); // jangan kirim password
 
+            // Base URL dinamis
+            $uri = $request->getUri();
+            $baseUrl = $uri->getScheme() . "://" . $uri->getHost();
+            if ($uri->getPort() && !in_array($uri->getPort(), [80, 443])) {
+                $baseUrl .= ":" . $uri->getPort();
+            }
+
+            // Tambahkan base URL ke foto user
+            if (!empty($user["foto"])) {
+                $user["foto"] = $baseUrl . "/" . $user["foto"];
+            }
+
             // Ambil data SDM berdasarkan user_id
             $stmtSdm = $db->prepare("SELECT * FROM mr_sdm WHERE user_id = :user_id LIMIT 1");
             $stmtSdm->execute(["user_id" => $user["id"]]);
@@ -75,9 +87,9 @@ return function (\Slim\App $app) {
 
             if ($sdm) {
                 // Tambahkan base URL untuk foto SDM
-                $baseUrl = $request->getUri()->getScheme() . "://" . $request->getUri()->getHost();
-                if ($request->getUri()->getPort()) $baseUrl .= ":" . $request->getUri()->getPort();
-                if (!empty($sdm["foto"])) $sdm["foto"] = $baseUrl . "/" . $sdm["foto"];
+                if (!empty($sdm["foto"])) {
+                    $sdm["foto"] = $baseUrl . "/" . $sdm["foto"];
+                }
 
                 $user["sdm"] = $sdm;
             } else {

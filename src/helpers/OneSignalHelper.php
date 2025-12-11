@@ -11,8 +11,8 @@ class OneSignalHelper
     protected static function initKeys()
     {
         if (!self::$appId || !self::$apiKey) {
-            self::$appId  = getenv('ONESIGNAL_APP_ID') ?: "a5e5e5a3-0f7b-47d1-81ce-588d1a89f49f";
-            self::$apiKey = getenv('ONESIGNAL_API_KEY') ?: "os_v2_app_uxs6liyppnd5daoolcgrvcput7ytp6ppejseqgm6jdg6xndq3rzumwgmkvds32m2y3umz5vvnctbnyykhbvxevcg3t33iof2m26qcby";
+            self::$appId  = getenv('ONESIGNAL_APP_ID') ?: "1993fdbb-0de7-4f06-8b61-89e471b48160";
+            self::$apiKey = getenv('ONESIGNAL_API_KEY') ?: "os_v2_app_dgj73oyn45hqnc3brhshdnebmc3t3bqa7ozukwvxkq42gim4dlqsl235ccb6ufbkn5a5jim3bzjiljf7odusd3yvbjpawtthlbfrylq";
         }
     }
 
@@ -29,49 +29,50 @@ class OneSignalHelper
     {
         self::initKeys();
 
+        // Jika player ID kosong, hentikan
         if (empty($playerIds)) return false;
         if (is_string($playerIds)) $playerIds = [$playerIds];
 
+        // Filter player ID yang valid
+        $playerIds = array_filter($playerIds, fn($p) => !empty($p));
+        if (empty($playerIds)) return false;
+
         $type = $data['type'] ?? 'general';
 
-        /*
-        |--------------------------------------------------------------------------
-        | 🧹 Bersihkan dan format ulang HTML untuk pesan
-        |--------------------------------------------------------------------------
-        */
+        // ✨ Bersihkan pesan dari HTML / karakter aneh
         $message = str_replace(['<br>', '<br/>', '<br />'], "\n", $message);
         $message = preg_replace('/<p[^>]*>(.*?)<\/p>/is', "$1\n\n", $message);
         $message = preg_replace('/<(ul|ol)[^>]*>/', "\n<$1>", $message);
 
-        // Ordered list (1., 2., 3.)
+        // Format ordered list
         if (preg_match_all('/<ol[^>]*>(.*?)<\/ol>/is', $message, $matches)) {
             foreach ($matches[1] as $block) {
                 $counter = 1;
                 $newBlock = preg_replace_callback('/<li[^>]*>(.*?)<\/li>/is', function ($m) use (&$counter) {
-                    return $counter++ . ". " . trim($m[1]) . "\n";
+                    return $counter++ . ". " . trim(strip_tags($m[1])) . "\n";
                 }, $block);
                 $message = str_replace($block, "\n" . $newBlock, $message);
             }
         }
 
-        // Unordered list (• item)
+        // Format unordered list
         $message = preg_replace('/<ul[^>]*>(.*?)<\/ul>/is', "\n$1", $message);
         $message = preg_replace('/<li[^>]*>(.*?)<\/li>/is', "• $1\n", $message);
+
+        // Bersihkan tag HTML dan entitas
         $message = html_entity_decode(strip_tags($message));
         $message = preg_replace("/\n{3,}/", "\n\n", $message);
         $message = trim($message);
 
-        /*
-        |--------------------------------------------------------------------------
-        | 🚀 Kirim ke OneSignal
-        |--------------------------------------------------------------------------
-        */
+        // Pastikan minimal 1 karakter
+        if ($message === '') $message = '(No content)';
+
         $payload = [
             'app_id' => self::$appId,
             'include_player_ids' => array_values($playerIds),
             'contents' => ["en" => $message],
             'headings' => ["en" => $title ?? ucfirst($type) . " Notification"],
-            'data' => $data,
+            'data' => (object)$data, // harus objek, bukan array kosong
             'android_group' => $type,
             'android_group_message' => ["en" => "You have \$[notif_count] new {$type} notifications"],
             'thread_id' => $type,
@@ -85,7 +86,7 @@ class OneSignalHelper
             ],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
             CURLOPT_SSL_VERIFYPEER => false
         ]);
 
@@ -98,8 +99,14 @@ class OneSignalHelper
             return false;
         }
 
-        // Log hasil untuk debugging
-        error_log("✅ OneSignal response: " . $result);
-        return $result;
+        // Decode hasil JSON agar tidak jadi string escaped
+        $resultData = json_decode($result, true);
+
+        // Log hasil
+        error_log("✅ OneSignal response: " . json_encode($resultData, JSON_UNESCAPED_UNICODE));
+
+        return $resultData;
     }
+
+
 }

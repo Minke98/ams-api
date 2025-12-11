@@ -120,3 +120,20 @@ function generateReportDamageId($db) {
 function generateCertificateId($db) {
     return generateSafeId($db, 'mr_sertifikasi', 'SRT', 3, 4);
 }
+
+
+function indoDate($dateString) {
+    $bulan = [
+        1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+
+    $date = DateTime::createFromFormat('Y-m-d', $dateString);
+    if (!$date) return $dateString;
+
+    $d = (int)$date->format('d');
+    $m = (int)$date->format('m');
+    $y = $date->format('Y');
+
+    return "$d {$bulan[$m]} $y";
+}

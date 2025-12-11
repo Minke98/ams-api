@@ -22,7 +22,8 @@ return function (\Slim\App $app) {
         }
 
         try {
-            if ($role === 1) {
+            if (in_array($role, ['0', '1', '3'])) {
+                // Role 0,1,3 → lihat semua SDM
                 $stmt = $db->prepare("
                     SELECT 
                         s.id AS sdm_id,
@@ -59,6 +60,7 @@ return function (\Slim\App $app) {
                 ");
                 $stmt->execute();
             } else {
+                // Role lain → hanya lihat SDM tertentu
                 $stmt = $db->prepare("
                     SELECT 
                         s.id AS sdm_id,
@@ -96,6 +98,7 @@ return function (\Slim\App $app) {
                 ");
                 $stmt->execute(['sdm_id' => $sdm_id]);
             }
+
 
             $sdmList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -165,145 +168,145 @@ return function (\Slim\App $app) {
 
 
     $app->get('/sdm/detail', function ($request, $response) {
-    $db = $this->get('db_default');
+        $db = $this->get('db_default');
 
-    $params = $request->getQueryParams();
-    $sdm_id = $params['sdm_id'] ?? null;
+        $params = $request->getQueryParams();
+        $sdm_id = $params['sdm_id'] ?? null;
 
-    if (!$sdm_id) {
-        return $response->withHeader('Content-Type', 'application/json')
-                        ->withStatus(400)
-                        ->write(json_encode([
-                            'status' => false,
-                            'message' => 'Parameter sdm_id wajib diisi'
-                        ]));
-    }
-
-    try {
-        // Base URL dinamis
-        $baseUrl = $request->getUri()->getScheme() . '://' . $request->getUri()->getHost();
-        if ($request->getUri()->getPort()) {
-            $baseUrl .= ':' . $request->getUri()->getPort();
-        }
-
-        // Ambil SDM berdasarkan sdm_id
-        $stmt = $db->prepare("
-            SELECT 
-                s.id AS sdm_id,
-                s.user_id,
-                s.prodi_id,
-                p.nama_prodi AS prodi_nama,
-                s.jenis_kelamin,
-                s.tanggal_lahir,
-                s.pendidikan_terakhir,
-                s.bidang_studi,
-                s.klasifikasi,
-                s.kategori_pengajar,
-                s.status AS sdm_status,
-                s.created_at AS sdm_created_at,
-                s.updated_at AS sdm_updated_at,
-                
-                u.id AS user_id,
-                u.nip,
-                u.full_name,
-                u.username,
-                u.email,
-                u.role,
-                u.is_claim,
-                u.device_id,
-                u.player_id,
-                u.foto AS user_foto,
-                u.last_login,
-                u.created_at AS user_created_at,
-                u.updated_at AS user_updated_at
-            FROM mr_sdm s
-            INNER JOIN mr_users u ON s.user_id = u.id
-            LEFT JOIN mr_prodi p ON s.prodi_id = p.id
-            WHERE s.id = :sdm_id
-            LIMIT 1
-        ");
-        $stmt->execute(['sdm_id' => $sdm_id]);
-        $sdm = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$sdm) {
+        if (!$sdm_id) {
             return $response->withHeader('Content-Type', 'application/json')
-                            ->withStatus(404)
+                            ->withStatus(400)
                             ->write(json_encode([
                                 'status' => false,
-                                'message' => 'SDM tidak ditemukan'
+                                'message' => 'Parameter sdm_id wajib diisi'
                             ]));
         }
 
-        // Ambil sertifikat SDM
-        $stmtCert = $db->prepare("
-            SELECT *
-            FROM mr_sertifikasi
-            WHERE sdm_id = :sdm_id
-            ORDER BY tanggal_expiry DESC
-        ");
-        $stmtCert->execute(['sdm_id' => $sdm['sdm_id']]);
-        $certificates = $stmtCert->fetchAll(PDO::FETCH_ASSOC);
-
-        // Tambahkan base URL ke file sertifikat
-        foreach ($certificates as &$cert) {
-            if (!empty($cert['file_sertifikat'])) {
-                $cert['file_sertifikat'] = $baseUrl . '/uploads/certificate/' . $cert['file_sertifikat'];
-            } else {
-                $cert['file_sertifikat'] = null;
+        try {
+            // Base URL dinamis
+            $baseUrl = $request->getUri()->getScheme() . '://' . $request->getUri()->getHost();
+            if ($request->getUri()->getPort()) {
+                $baseUrl .= ':' . $request->getUri()->getPort();
             }
+
+            // Ambil SDM berdasarkan sdm_id
+            $stmt = $db->prepare("
+                SELECT 
+                    s.id AS sdm_id,
+                    s.user_id,
+                    s.prodi_id,
+                    p.nama_prodi AS prodi_nama,
+                    s.jenis_kelamin,
+                    s.tanggal_lahir,
+                    s.pendidikan_terakhir,
+                    s.bidang_studi,
+                    s.klasifikasi,
+                    s.kategori_pengajar,
+                    s.status AS sdm_status,
+                    s.created_at AS sdm_created_at,
+                    s.updated_at AS sdm_updated_at,
+                    
+                    u.id AS user_id,
+                    u.nip,
+                    u.full_name,
+                    u.username,
+                    u.email,
+                    u.role,
+                    u.is_claim,
+                    u.device_id,
+                    u.player_id,
+                    u.foto AS user_foto,
+                    u.last_login,
+                    u.created_at AS user_created_at,
+                    u.updated_at AS user_updated_at
+                FROM mr_sdm s
+                INNER JOIN mr_users u ON s.user_id = u.id
+                LEFT JOIN mr_prodi p ON s.prodi_id = p.id
+                WHERE s.id = :sdm_id
+                LIMIT 1
+            ");
+            $stmt->execute(['sdm_id' => $sdm_id]);
+            $sdm = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$sdm) {
+                return $response->withHeader('Content-Type', 'application/json')
+                                ->withStatus(404)
+                                ->write(json_encode([
+                                    'status' => false,
+                                    'message' => 'SDM tidak ditemukan'
+                                ]));
+            }
+
+            // Ambil sertifikat SDM
+            $stmtCert = $db->prepare("
+                SELECT *
+                FROM mr_sertifikasi
+                WHERE sdm_id = :sdm_id
+                ORDER BY tanggal_expiry DESC
+            ");
+            $stmtCert->execute(['sdm_id' => $sdm['sdm_id']]);
+            $certificates = $stmtCert->fetchAll(PDO::FETCH_ASSOC);
+
+            // Tambahkan base URL ke file sertifikat
+            foreach ($certificates as &$cert) {
+                if (!empty($cert['file_sertifikat'])) {
+                    $cert['file_sertifikat'] = $baseUrl . '/uploads/certificate/' . $cert['file_sertifikat'];
+                } else {
+                    $cert['file_sertifikat'] = null;
+                }
+            }
+
+            // Susun response final
+            $result = [
+                'id' => $sdm['user_id'],
+                'nip' => $sdm['nip'],
+                'full_name' => $sdm['full_name'],
+                'username' => $sdm['username'],
+                'email' => $sdm['email'],
+                'role' => $sdm['role'],
+                'is_claim' => $sdm['is_claim'],
+                'device_id' => $sdm['device_id'],
+                'player_id' => $sdm['player_id'],
+                'foto' => $sdm['user_foto'],
+                'last_login' => $sdm['last_login'],
+                'created_at' => $sdm['user_created_at'],
+                'updated_at' => $sdm['user_updated_at'],
+
+                'sdm' => [
+                    'id' => $sdm['sdm_id'],
+                    'user_id' => $sdm['user_id'],
+                    'prodi_id' => $sdm['prodi_id'],
+                    'prodi_nama' => $sdm['prodi_nama'],
+                    'jenis_kelamin' => $sdm['jenis_kelamin'],
+                    'tanggal_lahir' => $sdm['tanggal_lahir'],
+                    'pendidikan_terakhir' => $sdm['pendidikan_terakhir'],
+                    'bidang_studi' => $sdm['bidang_studi'],
+                    'klasifikasi' => $sdm['klasifikasi'],
+                    'kategori_pengajar' => $sdm['kategori_pengajar'],
+                    'status' => $sdm['sdm_status'],
+                    'created_at' => $sdm['sdm_created_at'],
+                    'updated_at' => $sdm['sdm_updated_at'],
+                    'certificates' => $certificates,
+                    'certificate_count' => count($certificates)
+                ]
+            ];
+
+            return $response->withHeader('Content-Type', 'application/json')
+                            ->withStatus(200)
+                            ->write(json_encode([
+                                'status' => true,
+                                'data' => [$result]
+                            ]));
+
+        } catch (PDOException $e) {
+            return $response->withHeader('Content-Type', 'application/json')
+                            ->withStatus(500)
+                            ->write(json_encode([
+                                'status' => false,
+                                'message' => $e->getMessage()
+                            ]));
         }
-
-        // Susun response final
-        $result = [
-            'id' => $sdm['user_id'],
-            'nip' => $sdm['nip'],
-            'full_name' => $sdm['full_name'],
-            'username' => $sdm['username'],
-            'email' => $sdm['email'],
-            'role' => $sdm['role'],
-            'is_claim' => $sdm['is_claim'],
-            'device_id' => $sdm['device_id'],
-            'player_id' => $sdm['player_id'],
-            'foto' => $sdm['user_foto'],
-            'last_login' => $sdm['last_login'],
-            'created_at' => $sdm['user_created_at'],
-            'updated_at' => $sdm['user_updated_at'],
-
-            'sdm' => [
-                'id' => $sdm['sdm_id'],
-                'user_id' => $sdm['user_id'],
-                'prodi_id' => $sdm['prodi_id'],
-                'prodi_nama' => $sdm['prodi_nama'],
-                'jenis_kelamin' => $sdm['jenis_kelamin'],
-                'tanggal_lahir' => $sdm['tanggal_lahir'],
-                'pendidikan_terakhir' => $sdm['pendidikan_terakhir'],
-                'bidang_studi' => $sdm['bidang_studi'],
-                'klasifikasi' => $sdm['klasifikasi'],
-                'kategori_pengajar' => $sdm['kategori_pengajar'],
-                'status' => $sdm['sdm_status'],
-                'created_at' => $sdm['sdm_created_at'],
-                'updated_at' => $sdm['sdm_updated_at'],
-                'certificates' => $certificates,
-                'certificate_count' => count($certificates)
-            ]
-        ];
-
-        return $response->withHeader('Content-Type', 'application/json')
-                        ->withStatus(200)
-                        ->write(json_encode([
-                            'status' => true,
-                            'data' => [$result]
-                        ]));
-
-    } catch (PDOException $e) {
-        return $response->withHeader('Content-Type', 'application/json')
-                        ->withStatus(500)
-                        ->write(json_encode([
-                            'status' => false,
-                            'message' => $e->getMessage()
-                        ]));
-    }
-});
+    });
 
 
 

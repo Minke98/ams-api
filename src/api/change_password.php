@@ -3,76 +3,46 @@ use Slim\Http\Request;
 use Slim\Http\Response;
 
 return function (\Slim\App $app) {
+    
     $app->post('/change-password', function (Request $request, Response $response) {
         $input = $request->getParsedBody();
-        $employeeId = $input['employee_id'] ?? '';
-        $oldPassword = $input['old_password'] ?? '';
+        $user_id = $input['user_id'] ?? '';
         $newPassword = $input['new_password'] ?? '';
-    
-        if (empty($employeeId) || empty($oldPassword) || empty($newPassword)) {
-            $data = [
+
+        if (empty($user_id) || empty($newPassword)) {
+            return $response->withJson([
                 'status' => false,
-                'message' => 'Employee ID, old password, and new password are required'
-            ];
-            $response->getBody()->write(json_encode($data));
-            return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+                'message' => 'User ID dan new password diperlukan'
+            ], 400);
         }
-    
-        // PILIH DATABASE YANG MAU DIPAKAI:
-        $db = $this->get('db_default'); // <- default
-        // $db = $this->get('db_second'); // <- kalau mau pakai database kedua
-    
-        $sql = "SELECT * FROM ar_users WHERE employee_id = :employee_id LIMIT 1";
-    
+
+        $db = $this->get('db_default');
+
         try {
-            $stmt = $db->prepare($sql);
-            $stmt->execute(['employee_id' => $employeeId]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-            if (!$user) {
-                $data = [
-                    'status' => false,
-                    'message' => 'User not found with this employee ID'
-                ];
-                $response->getBody()->write(json_encode($data));
-                return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
-            }
-    
-            if (!password_verify($oldPassword, $user['password'])) {
-                $data = [
-                    'status' => false,
-                    'message' => 'Incorrect old password'
-                ];
-                $response->getBody()->write(json_encode($data));
-                return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
-            }
-    
+            // Hash password baru
             $hashedPassword = password_hash($newPassword, PASSWORD_BCRYPT);
-    
-            $updateSql = "UPDATE ar_users SET password = :new_password WHERE employee_id = :employee_id";
+
+            // Update password langsung
+            $updateSql = "UPDATE mr_users SET password = :new_password WHERE id = :user_id";
             $updateStmt = $db->prepare($updateSql);
             $updateStmt->execute([
                 'new_password' => $hashedPassword,
-                'employee_id' => $employeeId
+                'user_id' => $user_id
             ]);
-    
-            $data = [
+
+            return $response->withJson([
                 'status' => true,
-                'message' => 'Password successfully updated'
-            ];
-    
-            $response->getBody()->write(json_encode($data));
-            return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
-    
+                'message' => 'Password berhasil diubah'
+            ], 200);
+
         } catch (PDOException $e) {
-            $data = [
+            return $response->withJson([
                 'status' => false,
                 'message' => 'Database error: ' . $e->getMessage()
-            ];
-            $response->getBody()->write(json_encode($data));
-            return $response->withHeader('Content-Type', 'application/json')->withStatus(500);
+            ], 500);
         }
     });
+
     
 };
 

@@ -90,4 +90,73 @@ return function (\Slim\App $app) {
     });
 
 
+    $app->get('/user-data', function (Request $request, Response $response) {
+        $queryParams = $request->getQueryParams();
+        $user_id = $queryParams['user_id'] ?? null;
+
+        if (!$user_id) {
+            return $response->withJson([
+                "status" => false,
+                "message" => "Parameter 'user_id' diperlukan"
+            ], 400);
+        }
+
+        $db = $this->get("db_default");
+
+        try {
+            // Ambil user
+            $stmt = $db->prepare("SELECT * FROM mr_users WHERE id = :id LIMIT 1");
+            $stmt->execute(["id" => $user_id]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                return $response->withJson([
+                    "status" => false,
+                    "message" => "User tidak ditemukan"
+                ], 404);
+            }
+
+            unset($user['password']); // jangan kirim password
+
+            // Base URL dinamis
+            $uri = $request->getUri();
+            $baseUrl = $uri->getScheme() . "://" . $uri->getHost();
+            if ($uri->getPort() && !in_array($uri->getPort(), [80, 443])) {
+                $baseUrl .= ":" . $uri->getPort();
+            }
+
+            if (!empty($user["foto"])) {
+                $user["foto"] = $baseUrl . "/" . $user["foto"];
+            }
+
+            // Ambil data SDM
+            $stmtSdm = $db->prepare("SELECT * FROM mr_sdm WHERE user_id = :user_id LIMIT 1");
+            $stmtSdm->execute(["user_id" => $user["id"]]);
+            $sdm = $stmtSdm->fetch(PDO::FETCH_ASSOC);
+
+            if ($sdm) {
+                if (!empty($sdm["foto"])) {
+                    $sdm["foto"] = $baseUrl . "/" . $sdm["foto"];
+                }
+                $user["sdm"] = $sdm;
+            } else {
+                $user["sdm"] = null;
+            }
+
+            return $response->withJson([
+                "status" => true,
+                "message" => "User data retrieved successfully",
+                "data" => ["user" => $user]
+            ], 200);
+
+        } catch (PDOException $e) {
+            return $response->withJson([
+                "status" => false,
+                "message" => "Database error: " . $e->getMessage()
+            ], 500);
+        }
+    });
+
+
+
 };
