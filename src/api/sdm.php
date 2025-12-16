@@ -7,28 +7,28 @@ return function (\Slim\App $app) {
 
     $app->get('/sdm/list', function ($request, $response) {
         $db = $this->get('db_default');
-
+    
         $params = $request->getQueryParams();
         $role = isset($params['role']) ? (int)$params['role'] : null;
-
+        $userId = isset($params['user_id']) ? $params['user_id'] : null;
+    
         if ($role === null) {
-            return $response->withHeader('Content-Type', 'application/json')
-                            ->withStatus(400)
-                            ->write(json_encode([
-                                'status' => false,
-                                'message' => 'Parameter role wajib diisi'
-                            ]));
+            return $response->withJson([
+                'status' => false,
+                'message' => 'Parameter role wajib diisi'
+            ], 400);
         }
-
+    
         try {
             // Base URL dinamis
             $baseUrl = $request->getUri()->getScheme() . '://' . $request->getUri()->getHost();
             if ($request->getUri()->getPort()) {
                 $baseUrl .= ':' . $request->getUri()->getPort();
             }
-
-            // Ambil SDM sesuai role
-            if (in_array($role, [0, 1, 3])) {
+    
+            // ROLE 0 & 1 -> ambil semua data SDM
+            if (in_array($role, [0, 1])) {
+    
                 $stmt = $db->prepare("
                     SELECT 
                         s.id AS sdm_id,
@@ -44,7 +44,7 @@ return function (\Slim\App $app) {
                         s.status AS sdm_status,
                         s.created_at AS sdm_created_at,
                         s.updated_at AS sdm_updated_at,
-                        
+    
                         u.id AS user_id,
                         u.nip,
                         u.full_name,
@@ -64,7 +64,17 @@ return function (\Slim\App $app) {
                     ORDER BY u.full_name ASC
                 ");
                 $stmt->execute();
+    
             } else {
+    
+                // ROLE selain 0 & 1 -> hanya ambil diri sendiri
+                if (!$userId) {
+                    return $response->withJson([
+                        'status' => false,
+                        'message' => 'Parameter user_id wajib untuk role selain 0 dan 1'
+                    ], 400);
+                }
+    
                 $stmt = $db->prepare("
                     SELECT 
                         s.id AS sdm_id,
@@ -80,7 +90,7 @@ return function (\Slim\App $app) {
                         s.status AS sdm_status,
                         s.created_at AS sdm_created_at,
                         s.updated_at AS sdm_updated_at,
-
+    
                         u.id AS user_id,
                         u.nip,
                         u.full_name,
@@ -97,17 +107,17 @@ return function (\Slim\App $app) {
                     FROM mr_sdm s
                     INNER JOIN mr_users u ON s.user_id = u.id
                     LEFT JOIN mr_prodi p ON s.prodi_id = p.id
-                    WHERE u.role = :role
+                    WHERE s.user_id = :user_id
                     ORDER BY u.full_name ASC
                 ");
-                $stmt->execute(['role' => $role]);
+                $stmt->execute(['user_id' => $userId]);
             }
-
+    
             $sdmList = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+    
             $result = [];
             foreach ($sdmList as $sdm) {
-                // Ambil sertifikat per SDM
+                // Ambil sertifikat
                 $stmtCert = $db->prepare("
                     SELECT *
                     FROM mr_sertifikasi
@@ -116,17 +126,17 @@ return function (\Slim\App $app) {
                 ");
                 $stmtCert->execute(['sdm_id' => $sdm['sdm_id']]);
                 $certificates = $stmtCert->fetchAll(PDO::FETCH_ASSOC);
-
-                // Tambahkan base URL ke foto user
+    
+                // Foto user
                 $userFoto = !empty($sdm['user_foto']) ? $baseUrl . $sdm['user_foto'] : null;
-
-                // Tambahkan base URL ke file sertifikat
+    
+                // File sertifikat
                 foreach ($certificates as &$cert) {
                     $cert['file_sertifikat'] = !empty($cert['file_sertifikat']) 
-                        ? $baseUrl . '/uploads/certificate/' . $cert['file_sertifikat'] 
+                        ? $baseUrl . '/uploads/certificate/' . $cert['file_sertifikat']
                         : null;
                 }
-
+    
                 $result[] = [
                     'id' => $sdm['user_id'],
                     'nip' => $sdm['nip'],
@@ -141,7 +151,7 @@ return function (\Slim\App $app) {
                     'last_login' => $sdm['last_login'],
                     'created_at' => $sdm['user_created_at'],
                     'updated_at' => $sdm['user_updated_at'],
-
+    
                     'sdm' => [
                         'id' => $sdm['sdm_id'],
                         'user_id' => $sdm['user_id'],
@@ -161,21 +171,17 @@ return function (\Slim\App $app) {
                     ]
                 ];
             }
-
-            return $response->withHeader('Content-Type', 'application/json')
-                            ->withStatus(200)
-                            ->write(json_encode([
-                                'status' => true,
-                                'data' => $result
-                            ]));
-
+    
+            return $response->withJson([
+                'status' => true,
+                'data' => $result
+            ], 200);
+    
         } catch (PDOException $e) {
-            return $response->withHeader('Content-Type', 'application/json')
-                            ->withStatus(500)
-                            ->write(json_encode([
-                                'status' => false,
-                                'message' => $e->getMessage()
-                            ]));
+            return $response->withJson([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
     });
 

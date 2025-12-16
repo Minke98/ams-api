@@ -11,16 +11,25 @@ return function (\Slim\App $app) {
 
         $params = $request->getQueryParams();
         $ruangan_id = $params['ruangan_id'] ?? null;
+        $role = $params['role'] ?? null;
+        $user_id = $params['user_id'] ?? null;
 
         if (!$ruangan_id) {
-            $response->getBody()->write(json_encode([
+            return $response->withJson([
                 'status' => false,
                 'message' => 'Parameter ruangan_id wajib diisi'
-            ]));
-            return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+            ], 400);
         }
 
-        // 🔹 Dapatkan BASE URL dinamis
+        // Jika role 4 → wajib kirim user_id
+        if ($role == '4' && empty($user_id)) {
+            return $response->withJson([
+                'status' => false,
+                'message' => 'Parameter user_id wajib untuk role 4 (dosen)'
+            ], 400);
+        }
+
+        // Base URL
         $uri = $request->getUri();
         $baseUrl = $uri->getScheme() . "://" . $uri->getHost();
         if ($uri->getPort()) {
@@ -28,38 +37,33 @@ return function (\Slim\App $app) {
         }
 
         try {
-            // ============================
-            // Fungsi helper format status & prioritas
-            // ============================
+
             function mapStatus($status) {
-                switch ($status) {
-                    case 1: return 'Open';
-                    case 2: return 'In Progress';
-                    case 3: return 'Close';
-                    case 4: return 'Cancelled';
-                    default: return '-';
-                }
+                return [
+                    1 => 'Open',
+                    2 => 'In Progress',
+                    3 => 'Close',
+                    4 => 'Cancelled'
+                ][$status] ?? '-';
             }
 
             function mapPrioritas($prioritas) {
-                switch ($prioritas) {
-                    case 1: return 'Low';
-                    case 2: return 'Medium';
-                    case 3: return 'High';
-                    case 4: return 'Critical';
-                    default: return '-';
-                }
+                return [
+                    1 => 'Low',
+                    2 => 'Medium',
+                    3 => 'High',
+                    4 => 'Critical'
+                ][$prioritas] ?? '-';
             }
 
             // ============================
-            // QUERY LAPORAN
+            // BUILD QUERY
             // ============================
             $sql = "
                 SELECT 
                     l.*, 
                     a.nama_alat, 
                     s.nama_software,
-                    l.sdm_id,
                     sd.user_id,
                     u.full_name
                 FROM mr_laporan_kerusakan l
@@ -68,41 +72,48 @@ return function (\Slim\App $app) {
                 LEFT JOIN mr_sdm sd ON l.sdm_id = sd.id
                 LEFT JOIN mr_users u ON sd.user_id = u.id
                 WHERE (a.ruangan_id = :ruangan_id OR s.ruangan_id = :ruangan_id)
-                ORDER BY l.tanggal_laporan DESC
             ";
+
+            $paramsExecute = [
+                'ruangan_id' => $ruangan_id
+            ];
+
+            // Jika role = 4 → filter hanya laporan yg dibuat dosen itu
+            if ($role == '4') {
+                $sql .= " AND sd.user_id = :user_id";
+                $paramsExecute['user_id'] = $user_id;
+            }
+
+            $sql .= " ORDER BY l.tanggal_laporan DESC";
+
+            // Eksekusi
             $stmt = $db->prepare($sql);
-            $stmt->execute(['ruangan_id' => $ruangan_id]);
+            $stmt->execute($paramsExecute);
             $laporan = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Map status, prioritas & foto
+            // Format
             foreach ($laporan as &$item) {
                 $item['status_text'] = mapStatus((int)($item['status'] ?? 0));
                 $item['prioritas_text'] = mapPrioritas((int)($item['prioritas'] ?? 0));
 
-                // 🔹 Update foto jadi URL lengkap
                 $item['foto'] = !empty($item['foto'])
                     ? $baseUrl . "/uploads/damage_report/" . $item['foto']
                     : null;
             }
 
-            // ============================
-            // RESPONSE
-            // ============================
-            $response->getBody()->write(json_encode([
+            return $response->withJson([
                 'status' => true,
                 'data' => $laporan
-            ]));
-
-            return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
+            ], 200);
 
         } catch (PDOException $e) {
-            $response->getBody()->write(json_encode([
+            return $response->withJson([
                 'status' => false,
                 'message' => $e->getMessage()
-            ]));
-            return $response->withHeader('Content-Type', 'application/json')->withStatus(500);
+            ], 500);
         }
     });
+
 
 
 
@@ -193,7 +204,7 @@ return function (\Slim\App $app) {
         // ============================
         // Validasi field wajib
         // ============================
-        $requiredFields = ['ruangan_id', 'type', 'prioritas', 'tanggal', 'deskripsi', 'pelapor'];
+        $requiredFields = ['type', 'prioritas', 'tanggal', 'deskripsi', 'pelapor'];
         foreach ($requiredFields as $field) {
             if (empty($data[$field])) {
                 return $response
@@ -206,7 +217,9 @@ return function (\Slim\App $app) {
             }
         }
 
-        // Tentukan alat_id atau software_id
+        // ============================
+        // Tentukan alat_id / software_id
+        // ============================
         $alatId = null;
         $softwareId = null;
 
@@ -242,11 +255,11 @@ return function (\Slim\App $app) {
             // ============================
             $stmt = $db->prepare("
                 INSERT INTO mr_laporan_kerusakan (
-                    id, alat_id, software_id, sdm_id, ruangan_id,
+                    id, alat_id, software_id, sdm_id,
                     tanggal_laporan, deskripsi_kerusakan,
                     prioritas, status, foto, created_at
                 ) VALUES (
-                    :id, :alat_id, :software_id, :sdm_id, :ruangan_id,
+                    :id, :alat_id, :software_id, :sdm_id,
                     :tanggal_laporan, :deskripsi_kerusakan,
                     :prioritas, 1, :foto, NOW()
                 )
@@ -257,7 +270,6 @@ return function (\Slim\App $app) {
                 'alat_id' => $alatId,
                 'software_id' => $softwareId,
                 'sdm_id' => $data['pelapor'],
-                'ruangan_id' => $data['ruangan_id'],
                 'tanggal_laporan' => $data['tanggal'],
                 'deskripsi_kerusakan' => $data['deskripsi'],
                 'prioritas' => $data['prioritas'],
@@ -265,9 +277,8 @@ return function (\Slim\App $app) {
             ]);
 
             // ============================
-            // Notifikasi ke user admin
+            // Notifikasi ke admin
             // ============================
-
             $prioritasText = [
                 '1' => 'Low',
                 '2' => 'Medium',
@@ -278,7 +289,7 @@ return function (\Slim\App $app) {
             $prioritasReadable = $prioritasText[$data['prioritas']] ?? $data['prioritas'];
 
             $stmtNotify = $db->prepare("
-                SELECT u.id AS user_id, u.player_id
+                SELECT u.player_id
                 FROM mr_sdm s
                 JOIN mr_users u ON s.user_id = u.id
                 WHERE u.role IN ('0','1','3')
@@ -327,6 +338,7 @@ return function (\Slim\App $app) {
 
 
 
+
     $app->post('/report/update-status', function ($request, $response) {
         $db = $this->get('db_default');
         $data = $request->getParsedBody();
@@ -334,7 +346,7 @@ return function (\Slim\App $app) {
         // ============================
         // Validasi input wajib
         // ============================
-        $requiredFields = ['id', 'status', 'updater_sdm_id'];
+        $requiredFields = ['id', 'status'];
         foreach ($requiredFields as $field) {
             if (empty($data[$field])) {
                 return $response
@@ -349,7 +361,9 @@ return function (\Slim\App $app) {
 
         $id = $data['id'];
         $status = (int)$data['status'];
-        $updaterSdmId = $data['updater_sdm_id'];
+        
+        // updater_sdm_id sekarang OPSIONAL
+        $updaterSdmId = $data['updater_sdm_id'] ?? null;
 
         // ============================
         // Validasi status hanya 1–4
@@ -391,24 +405,47 @@ return function (\Slim\App $app) {
             $deskripsi = $report['deskripsi_kerusakan'] ?? '';
 
             // ============================
-            // Kirim notifikasi ke role 1 & 3 kecuali updater
+            // Build query notifikasi
             // ============================
-           $stmtNotify = $db->prepare("
-                SELECT u.id AS user_id, u.player_id, u.full_name
-                FROM mr_sdm s
-                JOIN mr_users u ON s.user_id = u.id
-                WHERE u.role IN ('0','1','3')
-                AND u.player_id IS NOT NULL
-                AND s.id != :updater_sdm_id
-            ");
-            $stmtNotify->execute(['updater_sdm_id' => $updaterSdmId]);
+            if ($updaterSdmId) {
+                // Jika updater_sdm_id ADA → exclude user tsb
+                $stmtNotify = $db->prepare("
+                    SELECT u.id AS user_id, u.player_id, u.full_name
+                    FROM mr_sdm s
+                    JOIN mr_users u ON s.user_id = u.id
+                    WHERE u.role IN ('0','1','3')
+                    AND u.player_id IS NOT NULL
+                    AND s.id != :updater_sdm_id
+                ");
+                $stmtNotify->execute(['updater_sdm_id' => $updaterSdmId]);
+            } else {
+                // Jika updater_sdm_id TIDAK ADA → kirim ke semua user role 0,1,3
+                $stmtNotify = $db->query("
+                    SELECT u.id AS user_id, u.player_id, u.full_name
+                    FROM mr_sdm s
+                    JOIN mr_users u ON s.user_id = u.id
+                    WHERE u.role IN ('0','1','3')
+                    AND u.player_id IS NOT NULL
+                ");
+            }
+
             $usersToNotify = $stmtNotify->fetchAll(PDO::FETCH_ASSOC);
 
-            $statusText = ['1' => 'Open', '2' => 'In Progress', '3' => 'Close', '4' => 'Cancelled'];
+            $statusText = [
+                '1' => 'Open',
+                '2' => 'In Progress',
+                '3' => 'Close',
+                '4' => 'Cancelled'
+            ];
+            
             $message = "Status laporan kerusakan telah diubah menjadi '{$statusText[$status]}'\nDeskripsi: {$deskripsi}";
 
             foreach ($usersToNotify as $u) {
-                OneSignalHelper::sendNotification($u['player_id'], $message, "Update Laporan Kerusakan");
+                OneSignalHelper::sendNotification(
+                    $u['player_id'],
+                    $message,
+                    "Update Laporan Kerusakan"
+                );
             }
 
             return $response
@@ -430,6 +467,7 @@ return function (\Slim\App $app) {
                 ]));
         }
     });
+
 
 
 

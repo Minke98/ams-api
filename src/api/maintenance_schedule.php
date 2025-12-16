@@ -311,6 +311,52 @@ return function (\Slim\App $app) {
             ], 500);
         }
     });
+    
+    
+    $app->delete('/maintenance/schedule/delete', function ($request, $response) {
+        $params = $request->getQueryParams();
+        $db = $this->get('db_default');
+    
+        $id = $params['id'] ?? null;
+    
+        if (!$id) {
+            return $response->withJson([
+                'status' => false,
+                'message' => "Parameter 'id' wajib diisi"
+            ], 400);
+        }
+    
+        try {
+            // cek apakah data ada
+            $stmt = $db->prepare("SELECT id FROM mr_maintenance WHERE id = ?");
+            $stmt->execute([$id]);
+            $exists = $stmt->fetch();
+    
+            if (!$exists) {
+                return $response->withJson([
+                    'status' => false,
+                    'message' => "Data tidak ditemukan"
+                ], 404);
+            }
+    
+            // delete
+            $del = $db->prepare("DELETE FROM mr_maintenance WHERE id = ?");
+            $del->execute([$id]);
+    
+            return $response->withJson([
+                'status' => true,
+                'message' => "Maintenance berhasil dihapus"
+            ], 200);
+    
+        } catch (Exception $e) {
+            return $response->withJson([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    });
+
+
 
 
 };

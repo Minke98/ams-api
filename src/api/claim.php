@@ -8,7 +8,7 @@ return function (\Slim\App $app) {
     // =========================
     // Check claim status
     // =========================
-        $app->get("/claim/check", function (Request $request, Response $response) {
+    $app->get("/claim/check", function (Request $request, Response $response) {
         $params = $request->getQueryParams();
         $nip = $params["nip"] ?? null;
 
