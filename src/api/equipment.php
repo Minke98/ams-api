@@ -247,7 +247,7 @@ return function (\Slim\App $app) {
             $uploadedFile = $files['foto'];
 
             $fotoName = uniqid() . "-" . $uploadedFile->getClientFilename();
-            $uploadPath = __DIR__ . "/../../public/uploads/alat/";
+            $uploadPath = dirname(__DIR__, 2) . '/uploads/alat/';
 
             // 👉 Pastikan foldernya ada
             if (!is_dir($uploadPath)) {
@@ -321,7 +321,7 @@ return function (\Slim\App $app) {
             $uploadedFile = $files['foto'];
 
             $fotoName = uniqid() . "-" . $uploadedFile->getClientFilename();
-            $uploadPath = __DIR__ . "/../../public/uploads/software/";
+            $uploadPath = dirname(__DIR__, 2) . '/uploads/software/';
 
             if (!is_dir($uploadPath)) {
                 mkdir($uploadPath, 0777, true);
@@ -406,7 +406,7 @@ return function (\Slim\App $app) {
             $uploadedFile = $files['foto'];
             $fotoName = uniqid() . "-" . $uploadedFile->getClientFilename();
 
-            $uploadPath = __DIR__ . "/../../public/uploads/alat/";
+            $uploadPath = dirname(__DIR__, 2) . '/uploads/alat/';
             if (!is_dir($uploadPath)) mkdir($uploadPath, 0777, true);
 
             $uploadedFile->moveTo($uploadPath . $fotoName);
@@ -487,7 +487,7 @@ return function (\Slim\App $app) {
             $uploadedFile = $files['foto'];
             $fotoName = uniqid() . "-" . $uploadedFile->getClientFilename();
 
-            $uploadPath = __DIR__ . "/../../public/uploads/software/";
+            $uploadPath = dirname(__DIR__, 2) . '/uploads/software/';
             if (!is_dir($uploadPath)) mkdir($uploadPath, 0777, true);
 
             $uploadedFile->moveTo($uploadPath . $fotoName);

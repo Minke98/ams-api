@@ -238,7 +238,7 @@ return function (\Slim\App $app) {
             $uploadedFile = $files['foto'];
             $fotoName = uniqid() . "-" . $uploadedFile->getClientFilename();
 
-            $uploadPath = __DIR__ . "/../../public/uploads/damage_report/";
+            $uploadPath = dirname(__DIR__, 2) . '/uploads/damage_report/';
             if (!is_dir($uploadPath)) {
                 mkdir($uploadPath, 0777, true);
             }

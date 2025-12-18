@@ -31,12 +31,12 @@ return function (\Slim\App $app) {
                 ], 400);
             }
 
-            $directory = __DIR__ . '/../../public/uploads/photos/';
+            $directory = dirname(__DIR__, 2) . '/uploads/photos/';
             if (!is_dir($directory)) mkdir($directory, 0777, true);
 
             $filename = $user_id . "-" . $foto->getClientFilename();
             $foto->moveTo($directory . $filename);
-            $fotoPath = "/uploads/photos/" . $filename;
+            $fotoPath = "uploads/photos/" . $filename;
         }
 
         $db = $this->get('db_default');

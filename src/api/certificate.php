@@ -57,7 +57,7 @@ return function (\Slim\App $app) {
             }
 
             // Simpan file
-            $uploadDir = __DIR__ . '/../../public/uploads/certificate/';
+            $uploadDir = dirname(__DIR__, 2) . '/uploads/certificate/';
             if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
             $fileName = uniqid('cert_') . '.' . $ext;
             $uploadedFile->moveTo($uploadDir . $fileName);
@@ -154,7 +154,7 @@ return function (\Slim\App $app) {
                         ]);
                     }
 
-                    $uploadDir = __DIR__ . '/../../public/uploads/certificate/';
+                    $uploadDir = dirname(__DIR__, 2) . '/uploads/certificate/';
                     if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
 
                     $newFileName = uniqid('cert_') . "." . $ext;
@@ -231,7 +231,7 @@ return function (\Slim\App $app) {
             }
 
             $file = $data['file_sertifikat'];
-            $uploadDir = __DIR__ . '/../../public/uploads/certificate/';
+            $uploadDir = dirname(__DIR__, 2) . '/uploads/certificate/';
 
             // Delete record
             $stmt = $db->prepare("DELETE FROM mr_sertifikasi WHERE id = :id");

@@ -278,7 +278,7 @@ return function (\Slim\App $app) {
                 $ext = pathinfo($foto->getClientFilename(), PATHINFO_EXTENSION);
                 $fotoName = 'room_' . time() . '.' . $ext;
 
-                $uploadPath = __DIR__ . '/../../public/uploads/rooms/';
+                $uploadPath = dirname(__DIR__, 2) . '/uploads/rooms/';
                 if (!is_dir($uploadPath)) {
                     mkdir($uploadPath, 0777, true);
                 }
@@ -380,7 +380,7 @@ return function (\Slim\App $app) {
                 $ext = pathinfo($foto->getClientFilename(), PATHINFO_EXTENSION);
                 $fotoName = 'room_' . time() . '.' . $ext;
 
-                $uploadPath = __DIR__ . '/../../public/uploads/rooms/';
+                $uploadPath = dirname(__DIR__, 2) . '/uploads/rooms/';
                 if (!is_dir($uploadPath)) {
                     mkdir($uploadPath, 0777, true);
                 }
@@ -473,7 +473,7 @@ return function (\Slim\App $app) {
 
             // Hapus foto lama jika ada
             if (!empty($room['foto'])) {
-                $fotoPath = __DIR__ . '/../../public/uploads/rooms/' . $room['foto'];
+                $fotoPath = dirname(__DIR__, 2) . '/uploads/rooms/' . $room['foto'];
                 if (file_exists($fotoPath)) {
                     unlink($fotoPath);
                 }
@@ -521,7 +521,7 @@ return function (\Slim\App $app) {
             $foto = $files['foto'] ?? null;
             $fileName = null;
             if ($foto && $foto->getError() === UPLOAD_ERR_OK) {
-                $uploadDir = __DIR__ . '/../../public/uploads/borrows/';
+                $uploadDir = dirname(__DIR__, 2) . '/uploads/borrows/';
                 if (!file_exists($uploadDir)) mkdir($uploadDir, 0777, true);
 
                 $fileName = time() . '_' . $foto->getClientFilename();
