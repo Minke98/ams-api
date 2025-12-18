@@ -7,30 +7,30 @@ return function (\Slim\App $app) {
 
     $app->get('/reminder/list', function ($request, $response) {
         $db = $this->get('db_default');
-
+    
         try {
             $params = $request->getQueryParams();
             $userId = $params['user_id'] ?? null;
             $role = $params['role'] ?? null;
-
+    
             if (!$userId || $role === null) {
                 return $response->withStatus(400)->withJson([
                     "status" => false,
                     "message" => "user_id dan role diperlukan"
                 ]);
             }
-
+    
             // Ambil SDM ID user ini (untuk filter sertifikat)
             $q = $db->prepare("SELECT id FROM mr_sdm WHERE user_id = ?");
             $q->execute([$userId]);
             $mySdm = $q->fetch(PDO::FETCH_ASSOC);
             $mySdmId = $mySdm['id'] ?? null;
-
+    
             $today = new DateTime();
-
+    
             $urgent = [];
             $upcoming = [];
-
+    
             // =====================================================
             // 1. DATA KERUSAKAN – akses tergantung role
             // =====================================================
@@ -45,15 +45,12 @@ return function (\Slim\App $app) {
                 ");
                 $qKerusakan->execute();
                 $kerusakan = $qKerusakan->fetchAll(PDO::FETCH_ASSOC);
-
+    
                 foreach ($kerusakan as $k) {
                     $urgent[] = ["type" => "kerusakan", "data" => $k];
                 }
             }
-
-            // Role 4 → TIDAK BOLEH lihat kerusakan
-
-
+    
             // =====================================================
             // 2. DATA SERTIFIKASI
             // =====================================================
@@ -65,31 +62,33 @@ return function (\Slim\App $app) {
             ");
             $qSertif->execute();
             $sertifikasi = $qSertif->fetchAll(PDO::FETCH_ASSOC);
-
+    
             foreach ($sertifikasi as $s) {
 
                 // FILTER ROLE → siapa yang boleh lihat apa
-                if ($role == '3' || $role == '4') {
+                if ($role == '3' || $role == '4' || $role == '2') {
                     // Laboran atau Dosen → hanya sertifikat miliknya sendiri
                     if ($s['sdm_id'] != $mySdmId) continue;
                 }
-
-                // Role 0,1,2 → bisa lihat semua, tidak difilter
-
-                // LOGIKA URGENT / UPCOMING
+    
+                // HITUNG EXPIRED / WARNING
                 $exp = new DateTime($s['tanggal_expiry']);
-                $diff = $today->diff($exp)->days;
-
+    
+                // ❌ jika sudah lewat → jangan tampil
                 if ($exp < $today) {
-                    $urgent[] = ["type" => "sertifikasi", "data" => $s];
-                } elseif ($diff <= 30) {
+                    continue;
+                }
+    
+                $diff = $today->diff($exp)->days;
+    
+                // <=30 hari → urgent
+                if ($diff <= 30) {
                     $urgent[] = ["type" => "sertifikasi", "data" => $s];
                 } else {
                     $upcoming[] = ["type" => "sertifikasi", "data" => $s];
                 }
             }
-
-
+    
             // =====================================================
             // 3. DATA MAINTENANCE
             // =====================================================
@@ -103,30 +102,34 @@ return function (\Slim\App $app) {
                 ");
                 $qMaint->execute();
                 $maintenance = $qMaint->fetchAll(PDO::FETCH_ASSOC);
-
+    
                 foreach ($maintenance as $m) {
-                    $selesai = new DateTime($m['tanggal_selesai_maintenance']);
-                    $diff = $today->diff($selesai)->days;
-
-                    if ($selesai < $today) {
-                        $urgent[] = ["type" => "maintenance", "data" => $m];
-                    } elseif ($diff <= 7) {
-                        $urgent[] = ["type" => "maintenance", "data" => $m];
-                    } else {
-                        $upcoming[] = ["type" => "maintenance", "data" => $m];
+    
+                    if (!empty($m['tanggal_selesai_maintenance'])) {
+                        $selesai = new DateTime($m['tanggal_selesai_maintenance']);
+    
+                        // ❌ Jika sudah lewat → jangan tampil
+                        if ($selesai < $today) {
+                            continue;
+                        }
+    
+                        $diff = $today->diff($selesai)->days;
+    
+                        if ($diff <= 7) {
+                            $urgent[] = ["type" => "maintenance", "data" => $m];
+                        } else {
+                            $upcoming[] = ["type" => "maintenance", "data" => $m];
+                        }
                     }
                 }
             }
-
-            // Role 4 → tidak boleh lihat maintenance
-
-
+    
             return $response->withJson([
                 "status" => true,
                 "urgent" => $urgent,
                 "upcoming" => $upcoming
             ]);
-
+    
         } catch (Exception $e) {
             return $response->withStatus(500)->withJson([
                 "status" => false,
@@ -134,6 +137,7 @@ return function (\Slim\App $app) {
             ]);
         }
     });
+
 
 
     $app->get('/cron/notify-expiry', function ($request, $response) {

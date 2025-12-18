@@ -6,41 +6,48 @@ return function (\Slim\App $app) {
 
     $app->get('/dashboard/summary', function ($request, $response) {
         $db = $this->get('db_default');
-
+    
         try {
-            // 1️⃣ Hitung Ruangan
+            // 1️⃣ Hitung Ruangan + alat + software
             $stmt = $db->query("SELECT COUNT(*) AS total, 
                                     (SELECT COUNT(*) FROM mr_alat) AS total_alat,
                                     (SELECT COUNT(*) FROM mr_software) AS total_software
                                 FROM mr_ruangan");
             $ruangan = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // 2️⃣ Hitung SDM
-            $stmt = $db->query("SELECT COUNT(*) AS total,
-                                    SUM(CASE WHEN status='1' THEN 1 ELSE 0 END) AS certified,
-                                    SUM(CASE WHEN status!='1' THEN 1 ELSE 0 END) AS uncertified
-                                FROM mr_sdm");
-            $sdm = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // 3️⃣ Hitung Maintenance
+    
+            // 2️⃣ Hitung SDM total
+            $stmt = $db->query("SELECT COUNT(*) AS total FROM mr_sdm");
+            $sdm_total = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    
+            // 3️⃣ Hitung SDM yang punya sertifikat aktif
+            $stmt = $db->query("SELECT COUNT(DISTINCT sdm_id) AS certified 
+                                FROM mr_sertifikasi 
+                                WHERE status = 1"); // active
+            $sdm_certified = $stmt->fetch(PDO::FETCH_ASSOC)['certified'];
+    
+            // 4️⃣ Tidak bersertifikat
+            $sdm_uncertified = $sdm_total - $sdm_certified;
+    
+            // 5️⃣ Hitung Maintenance
             $stmt = $db->query("SELECT COUNT(*) AS total,
                                     SUM(CASE WHEN jenis_maintenance=1 THEN 1 ELSE 0 END) AS open,
                                     SUM(CASE WHEN jenis_maintenance=2 THEN 1 ELSE 0 END) AS in_progress,
-                                    SUM(CASE WHEN jenis_maintenance=3 THEN 1 ELSE 0 END) AS solved
+                                    SUM(CASE WHEN jenis_maintenance=3 THEN 1 ELSE 0 END) AS close
                                 FROM mr_maintenance");
             $maintenance = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // 4️⃣ Hitung Laporan Kerusakan total
+    
+            // 6️⃣ Hitung Laporan Kerusakan total
             $stmt = $db->query("SELECT COUNT(*) AS total FROM mr_laporan_kerusakan");
             $laporan = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // 5️⃣ Hitung Ruangan Dipinjam & Tidak Digunakan dari mr_penggunaan_ruangan
+    
+            // 7️⃣ Ruangan Digunakan & Tidak Digunakan
             $stmt = $db->query("SELECT 
                                     SUM(CASE WHEN status=1 THEN 1 ELSE 0 END) AS borrowed,
                                     SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) AS not_used
                                 FROM mr_penggunaan_ruangan");
             $ruangan_status = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    
+            // 8️⃣ Response Dashboard
             $data = [
                 [
                     'title' => $ruangan['total'] . ' Ruangan',
@@ -50,18 +57,18 @@ return function (\Slim\App $app) {
                     ],
                 ],
                 [
-                    'title' => $sdm['total'] . ' SDM',
+                    'title' => $sdm_total . ' SDM',
                     'details' => [
-                        $sdm['certified'] . ' Bersertifikat',
-                        $sdm['uncertified'] . ' Tidak Bersertifikat',
+                        $sdm_certified . ' Bersertifikat',
+                        $sdm_uncertified . ' Tidak Bersertifikat',
                     ],
                 ],
                 [
                     'title' => $maintenance['total'] . ' Maintenance',
                     'details' => [
                         $maintenance['open'] . ' Open',
-                        $maintenance['in_progress'] . ' On Progress',
-                        $maintenance['solved'] . ' Solved',
+                        $maintenance['in_progress'] . ' In Progress',
+                        $maintenance['close'] . ' Close',
                     ],
                 ],
                 [
@@ -72,14 +79,14 @@ return function (\Slim\App $app) {
                     ],
                 ],
             ];
-
+    
             $response->getBody()->write(json_encode([
                 'status' => true,
                 'data' => $data
             ]));
-
+    
             return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
-
+    
         } catch (PDOException $e) {
             $response->getBody()->write(json_encode([
                 'status' => false,
@@ -88,6 +95,7 @@ return function (\Slim\App $app) {
             return $response->withHeader('Content-Type', 'application/json')->withStatus(500);
         }
     });
+
 
 
     $app->get('/user-data', function (Request $request, Response $response) {
