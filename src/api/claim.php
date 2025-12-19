@@ -11,68 +11,72 @@ return function (\Slim\App $app) {
     $app->get("/claim/check", function (Request $request, Response $response) {
         $params = $request->getQueryParams();
         $nip = $params["nip"] ?? null;
-
+    
         if (!$nip) {
             return $response->withJson([
                 "status" => false,
                 "message" => "Parameter 'nip' is required"
             ], 400);
         }
-
+    
         $db = $this->get('db_default');
-
+    
         try {
-
-            // 1️⃣ Cari user berdasarkan nip (langsung dari mr_users)
-            $sql_user = "SELECT * FROM mr_users WHERE nip = :nip LIMIT 1";
-            $stmt = $db->prepare($sql_user);
+    
+            // 1️⃣ Cari user berdasarkan NIP
+            $sql = "SELECT * FROM mr_users WHERE nip = :nip LIMIT 1";
+            $stmt = $db->prepare($sql);
             $stmt->execute(["nip" => $nip]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // 2️⃣ Jika user belum ada → return default profil kosong
+    
+            // 2️⃣ Jika tidak ditemukan → return "User not found"
             if (!$user) {
                 return $response->withJson([
-                    "status" => true,
-                    "message" => "User not registered yet",
-                    "data" => [
-                        "user" => [
-                            "id" => null,
-                            "nip" => $nip,
-                            "full_name" => null,
-                            "username" => null,
-                            "email" => null,
-                            "device_id" => null,
-                            "is_claim" => 0,
-                            "foto" => null,
-                            "last_login" => null
-                        ]
-                    ]
-                ], 200);
+                    "status" => false,
+                    "message" => "User not found"
+                ], 404);
             }
-            if (intval($user["is_claim"]) === 1) {
+    
+            // 3️⃣ Jika sudah claim → blokir
+            if ((int)$user["is_claim"] === 1) {
                 return $response->withJson([
                     "status" => false,
-                    "message" => "User already claimed",
+                    "message" => "User already claimed"
                 ], 409);
             }
-
-            // 4️⃣ Tambahkan base URL ke foto jika ada
+    
+            // 4️⃣ Base URL untuk foto
             $baseUrl = $request->getUri()->getScheme() . "://" . $request->getUri()->getHost();
-            if ($request->getUri()->getPort()) $baseUrl .= ":" . $request->getUri()->getPort();
-
+            if ($request->getUri()->getPort()) {
+                $baseUrl .= ":" . $request->getUri()->getPort();
+            }
+    
+            // 5️⃣ Perbaiki foto jadi absolute path
             if (!empty($user["foto"])) {
                 $user["foto"] = $baseUrl . "/" . $user["foto"];
             } else {
                 $user["foto"] = null;
             }
-
-            // 5️⃣ Return berhasil
+    
+            // 6️⃣ Berhasil → return data user
             return $response->withJson([
                 "status" => true,
                 "message" => "User found",
-                "data" => ["user" => $user]
+                "data" => [
+                    "user" => [
+                        "id"        => $user["id"],
+                        "nip"       => $user["nip"],
+                        "full_name" => $user["full_name"],
+                        "username"  => $user["username"],
+                        "email"     => $user["email"],
+                        "device_id" => $user["device_id"],
+                        "is_claim"  => $user["is_claim"],
+                        "foto"      => $user["foto"],
+                        "last_login"=> $user["last_login"]
+                    ]
+                ]
             ], 200);
-
+    
         } catch (PDOException $e) {
             return $response->withJson([
                 "status" => false,
@@ -80,6 +84,7 @@ return function (\Slim\App $app) {
             ], 500);
         }
     });
+
 
 
     // =========================
